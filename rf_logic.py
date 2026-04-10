@@ -2,7 +2,14 @@ import hashlib
 import random
 
 def calculate_threat_score(signal):
-    score = 0
+    """
+    Weighted Threat Scoring Model:
+    - Kinematics (Velocity/Doppler): 30%
+    - Signal Strength/Proximity: 25%
+    - Modulation/Spectral Signature: 25%
+    - Frequency Band (X-Band/Fire Control): 20%
+    """
+    score = 0.0
 
     power = float(signal.get("power_dbm", -120))
     snr = float(signal.get("snr_db", 0))
@@ -11,36 +18,41 @@ def calculate_threat_score(signal):
     modulation = str(signal.get("modulation", "")).strip()
     distance = float(signal.get("distance_km", 100))
     doppler = abs(float(signal.get("doppler_shift_hz", 0)))
+    velocity = float(signal.get("velocity_ms", 0))
+    altitude = float(signal.get("altitude_m", 0))
 
-    if doppler > 1000:
-        score += 25
-    elif doppler > 500:
-        score += 15
+    # 1. KINEMATICS (Max 30 pts)
+    # High velocity (>300m/s / Mach 1) and high doppler are aggressive
+    kin_score = min((velocity / 800) * 20, 20) + min((doppler / 2000) * 10, 10)
+    score += kin_score
 
-    if bandwidth >= 5000:
-        score += 15
+    # 2. PROXIMITY & POWER (Max 25 pts)
+    # Strong power at range is a massive emitter (Radar)
+    prox_score = 0
+    if distance < 50: prox_score += 10
+    if power > -70: prox_score += 15
+    score += min(prox_score, 25)
 
-    if modulation in ["PULSED", "FMCW", "SPREAD-SPECTRUM"]:
-        score += 20
-    elif modulation in ["QAM16", "OFDM", "UNKNOWN"]:
-        score += 10
+    # 3. SPECTRAL SIGNATURE (Max 25 pts)
+    sig_score = 0
+    if modulation in ["PULSED", "FMCW"]: sig_score += 20 # Radar
+    elif modulation == "SPREAD-SPECTRUM": sig_score += 15 # Military C2
+    elif bandwidth > 10000: sig_score += 10 # Wideband / Jamming
+    score += sig_score
 
-    if power > -70 and distance > 50:
-        score += 10
-
-    if power < -100 and snr < 5 and doppler > 500:
-        score += 15
-
-    if 8500 <= frequency <= 10500:
-        score += 15
+    # 4. FREQUENCY BAND (Max 20 pts)
+    band_score = 0
+    if 8500 <= frequency <= 10500: band_score += 20 # X-Band Fire Control
+    elif 1200 <= frequency <= 1400: band_score += 10 # L-Band Search
+    score += band_score
 
     return min(int(score), 100)
 
 
 def classify_signal(score):
-    if score < 40:
+    if score < 35:
         return "Friendly"
-    elif score < 70:
+    elif score < 65:
         return "Unknown"
     return "Hostile"
 
@@ -49,29 +61,27 @@ def anomaly_reason(signal):
     reasons = []
 
     power = float(signal.get("power_dbm", -120))
-    snr = float(signal.get("snr_db", 0))
     frequency = float(signal.get("frequency_mhz", 0))
     bandwidth = float(signal.get("bandwidth_khz", 0))
     modulation = str(signal.get("modulation", "")).strip()
-    distance = float(signal.get("distance_km", 100))
+    velocity = float(signal.get("velocity_ms", 0))
     doppler = abs(float(signal.get("doppler_shift_hz", 0)))
 
-    if doppler > 1000:
-        reasons.append(f"Supersonic doppler shift detected ({doppler} Hz)")
+    if velocity > 343: # Speed of sound
+        reasons.append(f"Supersonic kinematic trace ({round(velocity/343, 1)} Mach)")
+    elif velocity > 150:
+        reasons.append("High-speed airborne vector")
         
     if bandwidth >= 15000:
-        reasons.append("Ultra-wideband transmission")
+        reasons.append("Ultra-wideband saturation")
 
     if modulation in ["PULSED", "FMCW"]:
-        reasons.append("Radar signature detected")
+        reasons.append("Active Combat Radar pulses")
     elif modulation == "SPREAD-SPECTRUM":
-        reasons.append("Evasive spread-spectrum hopping")
+        reasons.append("Frequency-hopping evasion detected")
 
     if 8500 <= frequency <= 10500:
-        reasons.append("X-Band Fire Control illumination")
-
-    if snr < 2.0 and doppler > 500:
-        reasons.append("Low-observable (stealth) kinematics")
+        reasons.append("X-Band illumination (Precision Lock)")
 
     if not reasons:
         return "Stable communication pattern"
@@ -82,19 +92,19 @@ def generate_ai_anomaly_explanation(anomaly_string):
     if anomaly_string == "Stable communication pattern":
         return "The emitter is transmitting over a stable carrier wave with no immediate signs of hostile modulation, jumping, or aggressive kinematics. Recommend standard logging."
         
-    explanation = "The AI has detected severe deviations from standard telemetry: "
-    if "Supersonic doppler shift" in anomaly_string:
-        explanation += "The target exhibits extreme radial velocity consistent with a supersonic projectile or high-speed interceptor closing in. "
-    if "Ultra-wideband transmission" in anomaly_string:
-        explanation += "Massive bandwidth saturation implies either high-density data streaming (C2 datalink) or broadband electronic jamming attempts. "
-    if "Radar signature detected" in anomaly_string:
-        explanation += "Pulsed or FMCW modulation confirms this is an active radar array mechanically or electronically scanning the airspace. "
-    if "spread-spectrum hopping" in anomaly_string:
-        explanation += "The signal is rapidly hopping across frequencies, a cryptographic technique used by military networks to evade interception and target-locking. "
-    if "X-Band Fire Control" in anomaly_string:
-        explanation += "Transmission falls strictly within the X-Band frequency, strongly indicating a surface-to-air missile targeting system actively tracking. "
-    if "stealth" in anomaly_string:
-        explanation += "Low Signal-to-Noise ratio juxtaposed with high object kinematics suggests a Low-Observable (Stealth) craft attempting to mask its signature. "
+    explanation = "Tactical AI Analysis: "
+    if "Supersonic" in anomaly_string:
+        explanation += "Target is exceeding the sound barrier; likely a missile or interceptor aircraft. "
+    if "Airborne" in anomaly_string:
+        explanation += "Kinematics suggest a fast-moving aerial platform. "
+    if "Ultra-wideband" in anomaly_string:
+        explanation += "Signal bandwidth indicates high-density data or broadband jamming. "
+    if "Radar pulses" in anomaly_string:
+        explanation += "Emitter is actively scanning for targets using pulsed energy. "
+    if "Frequency-hopping" in anomaly_string:
+        explanation += "Signal is using FHSS to evade electronic counter-measures. "
+    if "X-Band" in anomaly_string:
+        explanation += "Precision fire-control radar detected! Target is likely preparing for engagement. "
         
     return explanation.strip()
 
@@ -108,9 +118,10 @@ def generate_global_ai_analysis(active_tracks):
     
     if not hots.empty:
         highest = hots.sort_values(by="Threat Score", ascending=False).iloc[0]
-        analysis += f"Primary threat lock is engaged on a {highest['Platform ID']} ({highest['Threat Score']}% Threat Rating) at bearing {highest['bearing_deg']}°, range {highest['distance_km']}km. "
+        mach = round(highest.get('velocity_ms', 0) / 343, 1)
+        analysis += f"PRIMARY THREAT: {highest['Platform ID']} ({highest['Threat Score']}%) at {highest['distance_km']}km. Tracking at {mach} Mach. "
     else:
-        analysis += "All tracked signals are currently benign or unidentified. No immediate intercept protocols recommended. "
+        analysis += "No immediate hostile intercept protocols recommended. "
         
     all_anomalies = []
     for _, track in active_tracks.iterrows():
@@ -120,7 +131,7 @@ def generate_global_ai_analysis(active_tracks):
             
     unique_anomalies = list(set(all_anomalies))
     if unique_anomalies:
-        analysis += f"Notable electronic warfare signatures detected across the battlespace: {', '.join(unique_anomalies[:3])}."
+        analysis += f"Signatures: {', '.join(unique_anomalies[:3])}."
         
     return analysis
 
@@ -129,47 +140,56 @@ def generate_global_ai_analysis(active_tracks):
 
 def recommendation(label, score):
     if label == "Friendly":
-        return "Maintain current scan routine"
+        return "Maintain routine surveillance"
     elif label == "Unknown":
-        if score >= 60:
-            return "Task ELINT drone for visual/spectral ID"
-        return "Log telemetry and monitor decay"
+        if score >= 55:
+            return "Deploy ISR drone for visual verification"
+        return "Monitor telemetry for pattern change"
     else:
-        if score >= 85:
-            return "AUTHORIZE KINETIC INTERCEPT / ELECTRONIC JAMMING"
-        return "Raise DEFCON, lock SAM tracking"
+        if score >= 80:
+            return "AUTHORIZE KINETIC ENGAGEMENT / C-RAM ACTIVE"
+        return "Lock Fire Control, Alert CAP (Combat Air Patrol)"
 
 def calculate_confidence(signal):
     snr = float(signal.get("snr_db", 0))
     distance = float(signal.get("distance_km", 100))
     
-    base_conf = 50.0
-    base_conf += min(snr * 1.5, 45.0)
+    # Confidence increases with SNR and proximity
+    base_conf = 40.0
+    base_conf += min(snr * 2.0, 50.0)
     
-    if distance > 100:
-        base_conf -= (distance - 100) * 0.1
+    if distance > 150:
+        base_conf -= (distance - 150) * 0.1
         
-    return min(max(base_conf, 15.0), 99.9)
+    return min(max(base_conf, 10.0), 99.9)
 
 def identify_platform(signal):
     freq = float(signal.get("frequency_mhz", 0))
     mod = str(signal.get("modulation", "")).strip()
     bw = float(signal.get("bandwidth_khz", 0))
+    vel = float(signal.get("velocity_ms", 0))
     
     if 225 <= freq <= 400:
-        return "Airborne C2 / AWACS Link"
+        return "Military Airborne Link (C2)"
     elif 8500 <= freq <= 10500:
-        if bw > 10000:
-            return "S-400 Fire Control Radar"
+        if vel > 400:
+            return "Su-57 Felon (Stealth Fighter)"
+        elif bw > 15000:
+            return "S-400 Triumf (Engagement Radar)"
         else:
             return "Su-35 Flanker-E"
     elif 30 <= freq <= 88:
-        return "Ground Infantry VHF Radio"
+        return "Tactical VHF Ground Network"
     elif 900 <= freq <= 1400:
-        return "Early Warning Radar (Long Range)"
+        if vel > 200:
+            return "MQ-9 Reaper (Armed UAV)"
+        return "Long-Range Early Warning Radar"
+        
+    if vel > 600:
+        return "Hypersonic ASM (Anti-Ship Missile)"
         
     if mod in ["UNKNOWN", "QAM16"]:
-        return "Unidentified Commercial Drone"
+        return "Commercial UAS / Civil Drone"
         
     return "Unknown Emitter Profile"
 
@@ -210,11 +230,14 @@ def tactical_ai_response(prompt: str, active_tracks, cv_events):
     if any(word in prompt for word in ["danger", "threat", "highest", "biggest", "target"]):
         if active_tracks is None or active_tracks.empty:
             return "Radar array is currently idle. No immediate threats detected."
-        highest = active_tracks.iloc[0]
+        highest = active_tracks.sort_values(by="Threat Score", ascending=False).iloc[0]
+        mach = round(highest.get('velocity_ms', 0) / 343, 1)
+        alt = int(highest.get('altitude_m', 0))
+        
         if highest["Classification"] == "Hostile":
-            return f"CRITICAL: The highest threat is a {highest['Platform ID']} at {highest['distance_km']}km bearing {highest['bearing_deg']}°. Threat score is {highest['Threat Score']}%. I recommend engaging."
+            return f"CRITICAL: The highest threat is a {highest['Platform ID']} at {highest['distance_km']}km bearing {highest['bearing_deg']}°. Target is tracking at {mach} Mach, Altitude {alt}m. Score is {highest['Threat Score']}%. Recommend immediate lock."
         else:
-            return f"The highest scored track is a {highest['Classification']} '{highest['Platform ID']}' with score {highest['Threat Score']}%. No hostiles currently pose a severe threat."
+            return f"The highest scored track is a {highest['Classification']} '{highest['Platform ID']}' with score {highest['Threat Score']}%. Moving at {mach} Mach. No hostiles currently pose a severe threat."
             
     # 2. Camera Analytics
     elif any(word in prompt for word in ["camera", "weapon", "gun", "knife", "person", "see"]):
@@ -222,18 +245,19 @@ def tactical_ai_response(prompt: str, active_tracks, cv_events):
             return "The optical surveillance feed is currently clear. No tactical alerts."
         weapons = [e for e in cv_events if "WEAPON" in e or "GUN" in e or "KNIFE" in e]
         if weapons:
-            return "VITAL INCIDENT: Lethal weapons have been visually confirmed by the optical system recently! Check the CV Logs immediately."
+            return "VITAL INCIDENT: Lethal weapons have been visually confirmed by the optical system! Status: HIGH ALERT."
         loiter = [e for e in cv_events if "LOITERING" in e]
         if loiter:
-            return "A suspect is currently loitering in the optical target zone. No weapons visually identified yet."
+            return "A suspect is currently loitering in the optical target zone (>10s). Surveillance lock established."
         return f"Recent optical event: {cv_events[0]}"
         
     # 3. Overall Sitrep
     elif any(word in prompt for word in ["sitrep", "status", "summary", "report"]):
         if active_tracks is None or active_tracks.empty:
-            return "SITREP: No active signals on the Electronic Order of Battle."
+            return "SITREP: Electronic Order of Battle is clear. No active emissions."
         hots = len(active_tracks[active_tracks["Classification"] == "Hostile"])
-        return f"TACTICAL SITREP: Tracking {len(active_tracks)} live signals. {hots} are classified as Hostile. Radar sweep and CV surveillance are nominal."
+        avg_dist = round(active_tracks["distance_km"].mean(), 1)
+        return f"TACTICAL SITREP: Tracking {len(active_tracks)} live signals (Avg Range: {avg_dist}km). {hots} are classified as Hostile. Radar sweep and CV surveillance are nominal."
 
     # 4. Intelligence Glossary
     elif "elint" in prompt:
