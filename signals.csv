@@ -1,0 +1,21 @@
+timestamp,frequency,strength,noise,duration,burst_rate,modulation,zone
+12:00:01,2.41,85,12,3,3,FM,North Sector
+12:00:02,2.45,82,15,2,4,FM,North Sector
+12:00:03,2.60,62,38,6,7,AM,South Gate
+12:00:04,2.75,40,65,8,9,Pulse,Restricted Area
+12:00:05,3.10,22,88,9,12,Pulse,Air Corridor
+12:00:06,2.35,78,18,4,3,FM,Base Perimeter
+12:00:07,2.90,55,52,7,8,QAM,South Gate
+12:00:08,3.25,28,82,9,11,Pulse,Restricted Area
+12:00:09,2.20,91,10,2,2,FM,North Sector
+12:00:10,2.85,48,60,8,9,QAM,Air Corridor
+12:00:11,3.05,26,90,10,13,Pulse,Restricted Area
+12:00:12,2.50,74,20,4,4,FM,Base Perimeter
+12:00:13,2.68,58,42,6,7,AM,South Gate
+12:00:14,3.15,24,86,9,12,Pulse,Restricted Area
+12:00:15,2.30,88,14,3,3,FM,North Sector
+12:00:16,2.95,46,63,8,10,QAM,Air Corridor
+12:00:17,3.18,20,92,10,14,Pulse,Restricted Area
+12:00:18,2.55,70,25,5,5,AM,Base Perimeter
+12:00:19,2.72,57,48,6,7,QAM,South Gate
+12:00:20,3.08,30,80,9,11,Pulse,Restricted Area
